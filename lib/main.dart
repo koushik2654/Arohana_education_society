@@ -3,14 +3,25 @@ import 'package:arohana_educational_society/login_page.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main()  {
+class SharedPreferencesService {
+  static late SharedPreferences _prefs;
+
+  static Future<void> init() async {
+    _prefs = await SharedPreferences.getInstance();
+  }
+  static SharedPreferences get prefs => _prefs;
+}
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   initHiveForFlutter();
+  await SharedPreferencesService.init();
   runApp(const MyApp());
 }
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key,}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

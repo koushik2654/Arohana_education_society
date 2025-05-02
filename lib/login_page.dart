@@ -6,8 +6,8 @@ import 'package:encrypt/encrypt.dart' as enc;
 import 'package:http/http.dart' as http;
 import 'package:arohana_educational_society/forgot_page.dart';
 import 'package:dart_jsonwebtoken/dart_jsonwebtoken.dart';
-import 'package:graphql_flutter/graphql_flutter.dart';
-
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 class loginpage extends StatefulWidget {
   const loginpage({super.key});
 
@@ -19,127 +19,150 @@ class _loginpageState extends State<loginpage> {
   bool _rememberMe = false;
   String givenName="";
   String profilePicture="";
+  String identityToken="";
+  final _formKey = GlobalKey<FormState>();
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
 
+  final key = enc.Key.fromUtf8("AI0WZVEU922NW4JX4HNKRVYGE2OST619");
+  final iv = enc.IV.fromUtf8("PSBCNLAQORFKUPBZ");
+  String _encryptData(String username, String password) {
+    final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
 
-  @override
-  Widget build(BuildContext context) {
-    final _formKey = GlobalKey<FormState>();
-    final TextEditingController _usernameController = TextEditingController();
-    final TextEditingController _passwordController = TextEditingController();
+    Map<String, dynamic> payload = {
+      "userName": "Corp53Schools-$username",
+      "password": password,
+      "userGUID": "",
+      "device_type": "{androidId: U1UGS34.23-82-2-7}",
+      "deviceModel": "A",
+      "device_id": "59774f0918e1ccb1b8d898021d8dfcba07bf88f6",
+      "device_token": "dRz9gvyhQUmo4JvEy-7xBy:APA91bFL1CjdcRyYQuagRik4lyw97ckkmS5aSylkoiVPzyvbIbpVq3zidaPihw1IkbtxAqCxzNxEF9tKZ32R51I6u-Wt4vtV1yEMo7kPa1UY7NSbhzMXgus",
+      "usercurrentversion": "2.4.9",
+      "packagename": "com.mcb.myclassboard.activity",
+      "apikey": "AI0WZVEU922NW4JX4HNKRVYGE2OST619",
+      "organisationID": 24
+    };
 
-    final key = enc.Key.fromUtf8("AI0WZVEU922NW4JX4HNKRVYGE2OST619");
-    final iv = enc.IV.fromUtf8("PSBCNLAQORFKUPBZ");
-    String _encryptData(String username, String password) {
-      final encrypter = enc.Encrypter(enc.AES(key, mode: enc.AESMode.cbc));
+    String jsonString = jsonEncode(payload);
+    final encrypted = encrypter.encrypt(jsonString, iv: iv);
 
-      Map<String, dynamic> payload = {
-        "userName": "Corp53Schools-$username",
-        "password": password,
-        "userGUID": "",
-        "device_type": "{androidId: U1UGS34.23-82-2-7}",
-        "deviceModel": "A",
-        "device_id": "59774f0918e1ccb1b8d898021d8dfcba07bf88f6",
-        "device_token": "dRz9gvyhQUmo4JvEy-7xBy:APA91bFL1CjdcRyYQuagRik4lyw97ckkmS5aSylkoiVPzyvbIbpVq3zidaPihw1IkbtxAqCxzNxEF9tKZ32R51I6u-Wt4vtV1yEMo7kPa1UY7NSbhzMXgus",
-        "usercurrentversion": "2.4.9",
-        "packagename": "com.mcb.myclassboard.activity",
-        "apikey": "AI0WZVEU922NW4JX4HNKRVYGE2OST619",
-        "organisationID": 24
-      };
+    return encrypted.base64;
+  }
+  Future<void> _sendEncryptedData() async {
+    if (!_formKey.currentState!.validate()) return;
 
-      String jsonString = jsonEncode(payload);
-      final encrypted = encrypter.encrypt(jsonString, iv: iv);
+    String apiUrl = "https://devparentapi.myclassboard.com/api/Mobile_API_/chkMobileLogin";
+    String username = _usernameController.text.trim();
+    String password = _passwordController.text.trim();
+    String encryptedData = _encryptData(username, password);
 
-      return encrypted.base64;
-    }
-    Future<void> _sendEncryptedData() async {
-      if (!_formKey.currentState!.validate()) return;
+    Map<String, dynamic> jsonBody = {
+      "data": encryptedData,
+    };
 
-      String apiUrl = "https://devparentapi.myclassboard.com/api/Mobile_API_/chkMobileLogin";
-      String username = _usernameController.text.trim();
-      String password = _passwordController.text.trim();
-      String encryptedData = _encryptData(username, password);
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+        },
+        body: jsonEncode(jsonBody),
+      );
 
-      Map<String, dynamic> jsonBody = {
-        "data": encryptedData,
+      print("Sent JSON: ${jsonEncode(jsonBody)}");
+      print("Response Status: ${response.statusCode}");
+      print("Response Body: ${response.body}");
 
-      };
-      try {
-        final response = await http.post(Uri.parse(apiUrl),
-          headers: {
-            "Content-Type": "application/json",
-            "Accept": "application/json",},
-          body: jsonEncode(jsonBody),
-        );
-        print("Sent JSON: ${jsonEncode(jsonBody)}");
-        print("Response Status: ${response.statusCode}");
-        print("Response Body: ${response.body}");
-        if (response.statusCode == 200) {
-          final responseData = jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final responseData = jsonDecode(response.body);
 
-          if (responseData.containsKey("response")) {
-            final decodedResponse = jsonDecode(responseData["response"]);
+        if (responseData.containsKey("response")) {
+          final rawResponse = responseData["response"]; // This is a string
 
-            if (decodedResponse.containsKey("IdentityToken")) {
-              try {
-                String identityToken = decodedResponse["IdentityToken"];
-                final jwt = JWT.decode(identityToken);  // Decoding the JWT
-                print("Decoded JWT Data: ${jwt.payload}");
-                setState(() {
-                  givenName = jwt.payload["given_name"]?.toString() ?? "No Name";
-                  profilePicture = jwt.payload["picture"]?.toString() ?? "";
-                });
-                print('${jwt.payload["picture"]}');
-              } catch (e) {
-                print("Error decoding JWT: $e");
-              }
+          // Decode the string once
+          final decodedResponse = jsonDecode(rawResponse);
+
+          if (decodedResponse.containsKey("IdentityToken")) {
+            identityToken = decodedResponse["IdentityToken"].toString();
+            print("IdentityToken (for GraphQL): $identityToken");
+
+            try {
+              final jwt = JWT.decode(identityToken);
+              print("Decoded JWT Payload: ${jwt.payload}");
+            } catch (e) {
+              print("Error decoding JWT: $e");
             }
+          }
 
-            if (decodedResponse.containsKey("StudentData")) {
-              final studentData = decodedResponse["StudentData"];
-              String branchName = studentData["BranchName"]?.toString() ?? "No Branch Name";
-              String userName = studentData["UserName"]?.toString() ?? "No userName";
-              String branchLogo = studentData["BranchLogo_App"]?.toString() ?? "";
-              int StudentEnrollmentID = (studentData["StudentEnrollmentID"] is int)
-                  ? studentData["StudentEnrollmentID"]
-                  : int.tryParse(studentData["StudentEnrollmentID"].toString()) ?? 0;
-              Get.to(() => ProfilePage(
-                branchName: branchName,
-                branchLogo: branchLogo,
-                StudentEnrollmentID:StudentEnrollmentID,
-                username: userName,
-                givenName:givenName,
-                picture: profilePicture,
-              ));
-            } else {
-              ScaffoldMessenger.of(Get.context!).showSnackBar(
-                SnackBar(content: Text("Login Successful, but no StudentData found!")),
-              );
-            }
+          if (decodedResponse.containsKey("StudentData")) {
+            final studentData = decodedResponse["StudentData"];
+
+            String branchName = studentData["BranchName"]?.toString() ?? "No Branch Name";
+            String userName = studentData["UserName"]?.toString() ?? "No userName";
+            int UserID = (studentData["UserID"] is int)
+                ? studentData["UserID"]
+                : int.tryParse(studentData["UserID"].toString()) ?? 0;
+            String branchLogo = studentData["BranchLogo_App"]?.toString() ?? "";
+            int StudentEnrollmentID = (studentData["StudentEnrollmentID"] is int)
+                ? studentData["StudentEnrollmentID"]
+                : int.tryParse(studentData["StudentEnrollmentID"].toString()) ?? 0;
+            final prefs = await SharedPreferences.getInstance();
+            prefs.setString('branchName', branchName);
+            prefs.setString('userName', userName);
+            prefs.setString('branchLogo', branchLogo);
+            prefs.setInt("UserID", UserID);
+            prefs.setInt('StudentEnrollmentID', StudentEnrollmentID);
+            Get.to(() => ProfilePage(
+              identityToken: decodedResponse["IdentityToken"],
+            ));
           } else {
-            ScaffoldMessenger.of(Get.context!).showSnackBar(
-              SnackBar(content: Text("Login Successful, but missing 'response' data!")),
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text("Login successful, but no StudentData found.")),
             );
           }
         } else {
-          ScaffoldMessenger.of(Get.context!).showSnackBar(
-            SnackBar(content: Text("Login Failed: ${response.body}")),
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Missing 'response' in server reply.")),
           );
         }
-      } catch (e) {
-        ScaffoldMessenger.of(Get.context!).showSnackBar(
-          SnackBar(content: Text("invalid username or password")),
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Login failed: ${response.body}")),
         );
       }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Invalid username or password")),
+      );
+      print("Login error: $e");
     }
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(appBar: AppBar(backgroundColor: Colors.teal.shade500,toolbarHeight: 0,),
         body:Column(children: [Container(
           width: double.infinity,color:Colors.white,
           padding: EdgeInsets.symmetric(vertical: 50),
           child: Column(
             children: [
-              SizedBox(height: 40),Image.network("https://cdn-mcb.myclassboard.com/gcscorp53schools/24/50/BranchLogUploads/12025/0201251703183477.jpg",
-                height: 100,
-                fit: BoxFit.contain,),
+              SizedBox(height: 40),Image.network('https://cdn-mcb.myclassboard.com/gcscorp53schools/24/50/BranchLogUploads/12025/0201251703183477.jpg',
+          errorBuilder: (context, error, stackTrace) {
+            return Column(
+              children: [
+                Icon(Icons.broken_image, size: 60, color: Colors.grey),
+                Text("Image unavailable", style: TextStyle(color: Colors.grey)),
+              ],
+            );
+          },
+        ),
               SizedBox(height: 20,),
               Text('Arohana Educations Society',
                 style: TextStyle(fontWeight: FontWeight.bold,fontSize: 20 ),),
